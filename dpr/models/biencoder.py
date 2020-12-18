@@ -97,6 +97,7 @@ class BiEncoder(nn.Module):
                                num_other_negatives: int = 0,
                                shuffle: bool = True,
                                shuffle_positives: bool = False,
+                               TopCodeR=True
                                ) -> BiEncoderBatch:
         """
         Creates a batch of the biencoder training tuple.
@@ -130,13 +131,13 @@ class BiEncoder(nn.Module):
             if shuffle:
                 random.shuffle(neg_ctxs)
                 random.shuffle(hard_neg_ctxs)
-
-            neg_ctxs = neg_ctxs[0:num_other_negatives]
-            hard_neg_ctxs = hard_neg_ctxs[0:num_hard_negatives]
+            if len(hard_neg_ctxs)>0:
+                neg_ctxs = neg_ctxs[0:num_other_negatives]
+                hard_neg_ctxs = hard_neg_ctxs[0:num_hard_negatives]
 
             all_ctxs = [positive_ctx] + neg_ctxs + hard_neg_ctxs
-            hard_negatives_start_idx = 1
-            hard_negatives_end_idx = 1 + len(hard_neg_ctxs)
+            hard_negatives_start_idx = 1 if not TopCodeR else 0
+            hard_negatives_end_idx = hard_negatives_start_idx + len(hard_neg_ctxs)
 
             current_ctxs_len = len(ctx_tensors)
 
@@ -145,10 +146,13 @@ class BiEncoder(nn.Module):
                                    ctx in all_ctxs]
 
             ctx_tensors.extend(sample_ctxs_tensors)
-            positive_ctx_indices.append(current_ctxs_len)
-            hard_neg_ctx_indices.append(
-                [i for i in
-                 range(current_ctxs_len + hard_negatives_start_idx, current_ctxs_len + hard_negatives_end_idx)])
+            if not TopCodeR:
+                positive_ctx_indices.append(current_ctxs_len)
+                hard_neg_ctx_indices.append(
+                    [i for i in
+                     range(current_ctxs_len + hard_negatives_start_idx, current_ctxs_len + hard_negatives_end_idx)])
+            else:
+                if
 
             question_tensors.append(tensorizer.text_to_tensor(question))
 
