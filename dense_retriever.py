@@ -19,6 +19,7 @@ import logging
 import pickle
 import time
 from typing import List, Tuple, Dict, Iterator
+import re
 
 import numpy as np
 import torch
@@ -89,18 +90,30 @@ class DenseRetriever(object):
         :return:
         """
         time0 = time.time()
+        logger.info('index search starting at: %f sec.', time0)
         results = self.index.search_knn(query_vectors, top_docs)
         logger.info('index search time: %f sec.', time.time() - time0)
         return results
 
 
-def parse_qa_csv_file(location) -> Iterator[Tuple[str, List[str]]]:
-    with open(location) as ifile:
-        reader = csv.reader(ifile, delimiter='\t')
-        for row in reader:
-            question = row[0]
-            answers = eval(row[1])
-            yield question, answers
+def parse_qa_csv_file(location, dataset=None) -> Iterator[Tuple[str, List[str]]]:
+    # with open(location) as ifile:
+    #     reader = csv.reader(ifile, delimiter='\t')
+    #     for row in reader:
+    #         question = row[0]
+    #         answers = eval(row[1])
+    #         yield question, answers
+    if not dataset:
+        with open(location) as reader:
+            for row in reader:
+                row_json = json.loads(row)
+                yield ' '.join(row_json["docstring_tokens"]), ' '.join(row_json["code_tokens"])
+    elif dataset=='CONCODE':
+        print("Parsing CONCODE dataset", flush=True)
+        with open(location) as reader:
+            for row in reader:
+                row_json = json.loads(row)
+                yield row_json["nl"], row_json["code"]
 
 
 def validate(passages: Dict[object, Tuple[str, str]], answers: List[List[str]],
@@ -115,23 +128,29 @@ def validate(passages: Dict[object, Tuple[str, str]], answers: List[List[str]],
     return match_stats.questions_doc_hits
 
 
-def load_passages(ctx_file: str) -> Dict[object, Tuple[str, str]]:
+def load_passages(ctx_files: str) -> Dict[object, Tuple[str, str]]:
     docs = {}
-    logger.info('Reading data from: %s', ctx_file)
-    if ctx_file.endswith(".gz"):
-        with gzip.open(ctx_file, 'rt') as tsvfile:
-            reader = csv.reader(tsvfile, delimiter='\t', )
-            # file format: doc_id, doc_text, title
-            for row in reader:
-                if row[0] != 'id':
-                    docs[row[0]] = (row[1], row[2])
-    else:
-        with open(ctx_file) as tsvfile:
-            reader = csv.reader(tsvfile, delimiter='\t', )
-            # file format: doc_id, doc_text, title
-            for row in reader:
-                if row[0] != 'id':
-                    docs[row[0]] = (row[1], row[2])
+    logger.info('Reading data from: %s', ctx_files)
+    for ctx_file in glob.glob(ctx_files):
+        if ctx_file.endswith(".gz"):
+            with gzip.open(ctx_file, 'rt') as tsvfile:
+                reader = csv.reader(tsvfile, delimiter='\t', )
+                # file format: doc_id, doc_text, title
+                for row in reader:
+                    if row[0] != 'id':
+                        docs[row[0]] = (row[1], row[2])
+        elif not ctx_file.endswith(".index.dpr") and not ctx_file.endswith(".index_meta.dpr"):
+            with open(ctx_file) as tsvfile:
+                # reader = csv.reader(tsvfile, delimiter='\t', )
+                # # file format: doc_id, doc_text, title
+                # for row in reader:
+                #     if row[0] != 'id':
+                #         docs[row[0]] = (row[1], row[2])
+                idx=0
+                for line in tsvfile:
+                    for w in ['DEDENT', 'INDENT', "NEW_LINE"]: line=line.replace(w, "")
+                    docs[args.ctx_file + "_" + str(idx)] =  (line, None)
+                    idx += 1
     return docs
 
 
@@ -141,6 +160,7 @@ def save_results(passages: Dict[object, Tuple[str, str]], questions: List[str], 
                  ):
     # join passages text with the result ids, their questions and assigning has|no answer labels
     merged_data = []
+    ctx_lens = []
     assert len(per_question_hits) == len(questions) == len(answers)
     for i, q in enumerate(questions):
         q_answers = answers[i]
@@ -163,10 +183,17 @@ def save_results(passages: Dict[object, Tuple[str, str]], questions: List[str], 
                 } for c in range(ctxs_num)
             ]
         })
+        for c in range(ctxs_num):
+            ctx_lens.append(len(docs[c][0].split()))
 
     with open(out_file, "w") as writer:
         writer.write(json.dumps(merged_data, indent=4) + "\n")
     logger.info('Saved results * scores  to %s', out_file)
+    try:
+        logger.info('Avg retrieved code len %d max len %d min len %d', np.mean(ctx_lens), max(ctx_lens), min(ctx_lens))
+    except:
+        import ipdb
+        ipdb.set_trace()
 
 
 def iterate_encoded_files(vector_files: list) -> Iterator[Tuple[object, np.array]]:
@@ -204,16 +231,16 @@ def main(args):
     logger.info('Encoder vector_size=%d', vector_size)
 
     if args.hnsw_index:
-        index = DenseHNSWFlatIndexer(vector_size, args.index_buffer)
+        index = DenseHNSWFlatIndexer(vector_size, args.index_buffer, args.faiss_gpu)
     else:
-        index = DenseFlatIndexer(vector_size, args.index_buffer)
+        index = DenseFlatIndexer(vector_size, args.index_buffer, args.faiss_gpu)
 
     retriever = DenseRetriever(encoder, args.batch_size, tensorizer, index)
 
 
     # index all passages
     ctx_files_pattern = args.encoded_ctx_file
-    input_paths = glob.glob(ctx_files_pattern)
+    input_paths = [path for path in glob.glob(ctx_files_pattern) if not path.endswith(".index.dpr") and not path.endswith(".index_meta.dpr")]
 
     index_path = "_".join(input_paths[0].split("_")[:-1])
     if args.save_or_load_index and (os.path.exists(index_path) or os.path.exists(index_path + ".index.dpr")):
@@ -227,7 +254,7 @@ def main(args):
     questions = []
     question_answers = []
 
-    for ds_item in parse_qa_csv_file(args.qa_file):
+    for ds_item in parse_qa_csv_file(args.qa_file, dataset=args.dataset):
         question, answers = ds_item
         questions.append(question)
         question_answers.append(answers)
@@ -257,23 +284,26 @@ if __name__ == '__main__':
     add_cuda_params(parser)
 
     parser.add_argument('--qa_file', required=True, type=str, default=None,
-                        help="Question and answers file of the format: question \\t ['answer1','answer2', ...]")
+                        help="Text and corresponding code file of the format: question \\t ['answer1','answer2', ...]")
     parser.add_argument('--ctx_file', required=True, type=str, default=None,
-                        help="All passages file in the tsv format: id \\t passage_text \\t title")
+                        help="All codes file in the txt format: function")
     parser.add_argument('--encoded_ctx_file', type=str, default=None,
                         help='Glob path to encoded passages (from generate_dense_embeddings tool)')
     parser.add_argument('--out_file', type=str, default=None,
                         help='output .json file path to write results to ')
-    parser.add_argument('--match', type=str, default='string', choices=['regex', 'string'],
+    parser.add_argument('--dataset', type=str, default=None,
+                        help=' to build correct dataset parser ')
+    parser.add_argument('--match', type=str, default='string', choices=['regex', 'string', 'exact'],
                         help="Answer matching logic type")
-    parser.add_argument('--n-docs', type=int, default=200, help="Amount of top docs to return")
+    parser.add_argument('--n-docs', type=int, default=100, help="Amount of top docs to return")
     parser.add_argument('--validation_workers', type=int, default=16,
                         help="Number of parallel processes to validate results")
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for question encoder forward pass")
-    parser.add_argument('--index_buffer', type=int, default=50000,
+    parser.add_argument('--index_buffer', type=int, default=200000,
                         help="Temporal memory data buffer size (in samples) for indexer")
     parser.add_argument("--hnsw_index", action='store_true', help='If enabled, use inference time efficient HNSW index')
     parser.add_argument("--save_or_load_index", action='store_true', help='If enabled, save index')
+    parser.add_argument("--faiss_gpu", action='store_true', help='If enabled, save use  faiss_gpu')
 
     args = parser.parse_args()
 

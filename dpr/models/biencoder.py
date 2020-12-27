@@ -118,11 +118,12 @@ class BiEncoder(nn.Module):
         for sample in samples:
             # ctx+ & [ctx-] composition
             # as of now, take the first(gold) ctx+ only
-            if shuffle and shuffle_positives:
-                positive_ctxs = sample['positive_ctxs']
-                positive_ctx = positive_ctxs[np.random.choice(len(positive_ctxs))]
-            else:
-                positive_ctx = sample['positive_ctxs'][0]
+            if len(sample['positive_ctxs'])>0:
+                if shuffle and shuffle_positives:
+                    positive_ctxs = sample['positive_ctxs']
+                    positive_ctx = positive_ctxs[np.random.choice(len(positive_ctxs))]
+                else:
+                    positive_ctx = sample['positive_ctxs'][0]
 
             neg_ctxs = sample['negative_ctxs']
             hard_neg_ctxs = sample['hard_negative_ctxs']
@@ -136,8 +137,9 @@ class BiEncoder(nn.Module):
                 hard_neg_ctxs = hard_neg_ctxs[0:num_hard_negatives]
 
             all_ctxs = [positive_ctx] + neg_ctxs + hard_neg_ctxs
-            hard_negatives_start_idx = 1 if not TopCodeR else 0
-            hard_negatives_end_idx = hard_negatives_start_idx + len(hard_neg_ctxs)
+
+            hard_negatives_start_idx = 1
+            hard_negatives_end_idx = 1 + len(hard_neg_ctxs)
 
             current_ctxs_len = len(ctx_tensors)
 
@@ -146,13 +148,11 @@ class BiEncoder(nn.Module):
                                    ctx in all_ctxs]
 
             ctx_tensors.extend(sample_ctxs_tensors)
-            if not TopCodeR:
-                positive_ctx_indices.append(current_ctxs_len)
-                hard_neg_ctx_indices.append(
-                    [i for i in
-                     range(current_ctxs_len + hard_negatives_start_idx, current_ctxs_len + hard_negatives_end_idx)])
-            else:
-                if
+
+            positive_ctx_indices.append(current_ctxs_len)
+            hard_neg_ctx_indices.append(
+                [i for i in
+                 range(current_ctxs_len + hard_negatives_start_idx, current_ctxs_len + hard_negatives_end_idx)])
 
             question_tensors.append(tensorizer.text_to_tensor(question))
 

@@ -83,12 +83,16 @@ class BiEncoderTrainer(object):
 
     def get_data_iterator(self, path: str, batch_size: int, shuffle=True,
                           shuffle_seed: int = 0,
-                          offset: int = 0, upsample_rates: list = None) -> ShardedDataIterator:
+                          offset: int = 0, upsample_rates: list = None, debug = False) -> ShardedDataIterator:
         data_files = glob.glob(path)
         data = read_data_from_json_files(data_files, upsample_rates)
 
         # filter those without positive ctx
         data = [r for r in data if len(r['positive_ctxs']) > 0]
+
+        if debug: data = data[:100]
+
+
         logger.info('Total cleaned data size: {}'.format(len(data)))
 
         return ShardedDataIterator(data, shard_id=self.shard_id,
@@ -106,7 +110,7 @@ class BiEncoderTrainer(object):
         train_iterator = self.get_data_iterator(args.train_file, args.batch_size,
                                                 shuffle=True,
                                                 shuffle_seed=args.seed, offset=self.start_batch,
-                                                upsample_rates=upsample_rates)
+                                                upsample_rates=upsample_rates, debug=args.debug)
 
         logger.info("  Total iterations per epoch=%d", train_iterator.max_iterations)
         updates_per_epoch = train_iterator.max_iterations // args.gradient_accumulation_steps
@@ -432,7 +436,6 @@ def _calc_loss(args, loss_function, local_q_vector, local_ctx_vectors, local_pos
 
         for i, item in enumerate(global_question_ctx_vectors):
             q_vector, ctx_vectors, positive_idx, hard_negatives_idxs = item
-
             if i != args.local_rank:
                 global_q_vector.append(q_vector.to(local_q_vector.device))
                 global_ctxs_vector.append(ctx_vectors.to(local_q_vector.device))
@@ -508,6 +511,7 @@ def main():
                                 Increase this if you see errors like "encoded data exceeds max_size ..."')
 
     parser.add_argument("--fix_ctx_encoder", action='store_true')
+    parser.add_argument("--debug", action='store_true')
     parser.add_argument("--shuffle_positive_ctx", action='store_true')
 
     # input/output src params
