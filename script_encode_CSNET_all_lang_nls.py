@@ -1,3 +1,4 @@
+
 import os
 
 lang='python'
@@ -8,9 +9,9 @@ lang='python'
 CHECKPOINT="/home/rizwan/DPR_models/biencoder_models_codexglue_text_code/python/dpr_biencoder.3.3935"
 
 
-GITHUB_DB="/local/wasiahmad/github_data/"+lang+"/" #local in NLP10
+GITHUB_DB="/home/rizwan/CodeBERT/data/codesearch/train_valid/"+lang+"/" #local in NLP10
 
-OUTPUT_DIR ='/local/rizwan/DPR_models/github_encoddings_codexglue_text_code/'+lang+"/"
+OUTPUT_DIR ='/local/rizwan/DPR_models/biencoder_models_codexglue_text_code/'+lang+"/"
 
 pretrained_model="microsoft/codebert-base"
 

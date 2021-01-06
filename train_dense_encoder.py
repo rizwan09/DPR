@@ -85,7 +85,10 @@ class BiEncoderTrainer(object):
                           shuffle_seed: int = 0,
                           offset: int = 0, upsample_rates: list = None, debug = False) -> ShardedDataIterator:
         data_files = glob.glob(path)
-        data = read_data_from_json_files(data_files, upsample_rates)
+        data = read_data_from_json_files(data_files, upsample_rates, \
+                                         text_to_code=self.args.text_to_code,\
+                                         concode_with_code=self.args.concode_with_code,\
+                                         dataset=self.args.dataset)
 
         # filter those without positive ctx
         data = [r for r in data if len(r['positive_ctxs']) > 0]
@@ -108,9 +111,9 @@ class BiEncoderTrainer(object):
             upsample_rates = eval(args.train_files_upsample_rates)
 
         train_iterator = self.get_data_iterator(args.train_file, args.batch_size,
-                                                shuffle=True,
-                                                shuffle_seed=args.seed, offset=self.start_batch,
-                                                upsample_rates=upsample_rates, debug=args.debug)
+                                                shuffle=True, shuffle_seed=args.seed, \
+                                                offset=self.start_batch, upsample_rates=upsample_rates, \
+                                                debug=args.debug)
 
         logger.info("  Total iterations per epoch=%d", train_iterator.max_iterations)
         updates_per_epoch = train_iterator.max_iterations // args.gradient_accumulation_steps
@@ -513,6 +516,10 @@ def main():
     parser.add_argument("--fix_ctx_encoder", action='store_true')
     parser.add_argument("--debug", action='store_true')
     parser.add_argument("--shuffle_positive_ctx", action='store_true')
+    parser.add_argument("--text_to_code", action='store_true')
+    parser.add_argument("--concode_with_code", action='store_true')
+    parser.add_argument('--dataset', type=str, default=None,
+                        help=' to build correct dataset parser ')
 
     # input/output src params
     parser.add_argument("--output_dir", default=None, type=str,
