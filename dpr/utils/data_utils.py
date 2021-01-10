@@ -51,7 +51,7 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
                 logger.info('Aggregated data size: {}'.format(len(results)))
         else:
             if dataset == 'CONCODE':
-                print("Parsing CONCODE dataset", flush=True)
+                logger.info("Parsing CONCODE dataset")
                 source_str = "nl"
                 target_str = "code"
                 if not text_to_code:
@@ -74,7 +74,22 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
                             logger.info("Source/q: %s", q)
                             logger.info("Traget/context: %s", ctx["text"])
                             logger.info("----------------------")
-
+            if dataset == "KP20k":
+                logger.info("Parsing KP20k dataset")
+                with open(path) as reader:
+                    for row in reader:
+                        line = json.loads(row)
+                        q = line["keyword"]
+                        text = line["title"]+ ' </s> ' + line["abstract"]
+                        ctx = {"text": text, "title": None, "answers": [ text ]}
+                        object = {"question": q, "hard_negative_ctxs": [], "negative_ctxs": [],
+                                  "positive_ctxs": [ctx], "label": "1"}
+                        results.append(object)
+                        if len(results) < 5:
+                            logger.info("----------------------")
+                            logger.info("Source/q: %s", q)
+                            logger.info("Traget/context: %s", ctx["text"])
+                            logger.info("----------------------")
 
             elif path.endswith("txt"):
                 with open(path, "r", encoding='utf-8') as f:

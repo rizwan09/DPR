@@ -96,24 +96,36 @@ class DenseRetriever(object):
         return results
 
 
-def parse_qa_csv_file(location, dataset=None) -> Iterator[Tuple[str, List[str]]]:
-    # with open(location) as ifile:
-    #     reader = csv.reader(ifile, delimiter='\t')
-    #     for row in reader:
-    #         question = row[0]
-    #         answers = eval(row[1])
-    #         yield question, answers
-    if not dataset:
+def parse_qa_csv_file(location, dataset=None, CSNET_ADV=False, concode_with_code=False) -> Iterator[Tuple[str, List[str]]]:
+    if CSNET_ADV:
+        with open(location) as tsvfile:
+            for line in tsvfile:
+                row_json = json.loads(line)
+                yield row_json["docstring"], row_json["function"]
+
+    elif not dataset:
         with open(location) as reader:
             for row in reader:
                 row_json = json.loads(row)
                 yield ' '.join(row_json["docstring_tokens"]), ' '.join(row_json["code_tokens"])
     elif dataset=='CONCODE':
-        print("Parsing CONCODE dataset", flush=True)
+        logger.info("Parsing CONCODE dataset")
         with open(location) as reader:
             for row in reader:
                 row_json = json.loads(row)
-                yield row_json["nl"], row_json["code"]
+                q=row_json["nl"]
+                if not concode_with_code:
+                    q = q.split("concode_field_sep")[0]
+                yield q, row_json["code"]
+
+    elif dataset=='KP20k':
+        logger.info("Parsing KP20k dataset")
+        with open(location) as reader:
+            for row in reader:
+                line = json.loads(row)
+                q = line["keyword"]
+                text = line["title"] + ' </s> ' + line["abstract"]
+                yield q, text
 
 
 def validate(passages: Dict[object, Tuple[str, str]], answers: List[List[str]],
@@ -128,11 +140,36 @@ def validate(passages: Dict[object, Tuple[str, str]], answers: List[List[str]],
     return match_stats.questions_doc_hits
 
 
-def load_passages(ctx_files: str) -> Dict[object, Tuple[str, str]]:
+def load_passages(ctx_files: str, CSNET_ADV=False, dataset = None) -> Dict[object, Tuple[str, str]]:
     docs = {}
     logger.info('Reading data from: %s', ctx_files)
     for ctx_file in glob.glob(ctx_files):
-        if ctx_file.endswith(".gz"):
+        if CSNET_ADV:
+            with open(ctx_file) as tsvfile:
+                for line in tsvfile:
+                    row =json.loads(line)
+                    docs[row["idx"]] = (row["function"], None)
+        elif dataset == "CONCODE":
+            with open(ctx_file) as tsvfile:
+                idx=0
+                for line in tsvfile:
+                    js = json.loads(line)
+                    docs[args.ctx_file + "_" + str(idx)] = (js["code"], js["nl"])
+                    idx += 1
+        elif dataset == "KP20k":
+            with open(ctx_file) as tsvfile:
+                logger.info( "Reading %s", ctx_file)
+                idx=0
+                for line in tsvfile:
+                    line = json.loads(line)
+                    text = line["title"] + ' </s> ' + line["abstract"]
+                    docs[str(idx)] = (line["abstract"], line["title"])
+                    idx += 1
+
+
+
+
+        elif ctx_file.endswith(".gz"):
             with gzip.open(ctx_file, 'rt') as tsvfile:
                 reader = csv.reader(tsvfile, delimiter='\t', )
                 # file format: doc_id, doc_text, title
@@ -254,7 +291,7 @@ def main(args):
     questions = []
     question_answers = []
 
-    for ds_item in parse_qa_csv_file(args.qa_file, dataset=args.dataset):
+    for ds_item in parse_qa_csv_file(args.qa_file, dataset=args.dataset, CSNET_ADV=args.CSNET_ADV, concode_with_code=args.concode_with_code):
         question, answers = ds_item
         questions.append(question)
         question_answers.append(answers)
@@ -264,10 +301,30 @@ def main(args):
     # get top k results
     top_ids_and_scores = retriever.get_top_docs(questions_tensor.numpy(), args.n_docs)
 
-    all_passages = load_passages(args.ctx_file)
+    all_passages = load_passages(args.ctx_file, args.CSNET_ADV, dataset=args.dataset)
 
     if len(all_passages) == 0:
         raise RuntimeError('No passages data found. Please specify ctx_file param properly.')
+
+    if args.CSNET_ADV:
+        import jsonlines
+        with open(args.qa_file) as tsvfile, jsonlines.open("predictions.jsonl", "w") as wf:
+            for line, top_ids_score  in zip(tsvfile, top_ids_and_scores):
+                row_json = json.loads(line)
+                wf.write({"url":row_json["url"], "answers":top_ids_score[0]})
+        import ipdb
+        ipdb.set_trace()
+    if args.dataset=="KP20k":
+        logger.info('Writing retrivals to: predictions_KP20k.jsonl')
+        import jsonlines
+        with open(args.qa_file) as tsvfile, jsonlines.open("predictions_KP20k.jsonl", "w") as wf:
+            idx=0
+            for line, top_ids_score  in zip(tsvfile, top_ids_and_scores):
+                wf.write({"id":str(idx), "answers":top_ids_score[0]})
+                idx+=1
+        import ipdb
+        ipdb.set_trace()
+
 
     questions_doc_hits = validate(all_passages, question_answers, top_ids_and_scores, args.validation_workers,
                                   args.match)
@@ -304,6 +361,11 @@ if __name__ == '__main__':
     parser.add_argument("--hnsw_index", action='store_true', help='If enabled, use inference time efficient HNSW index')
     parser.add_argument("--save_or_load_index", action='store_true', help='If enabled, save index')
     parser.add_argument("--faiss_gpu", action='store_true', help='If enabled, save use  faiss_gpu')
+    parser.add_argument("--CSNET_ADV", action='store_true',
+                        help="Whether to parse CSNET_ADV.")
+    parser.add_argument("--concode_with_code", action='store_true',
+                        help="Whether to use concode_with_code.")
+
 
     args = parser.parse_args()
 

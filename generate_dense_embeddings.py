@@ -27,6 +27,8 @@ from dpr.options import add_encoder_params, setup_args_gpu, print_args, set_enco
     add_tokenizer_params, add_cuda_params
 from dpr.utils.data_utils import Tensorizer
 from dpr.utils.model_utils import setup_for_distributed_mode, get_model_obj, load_states_from_checkpoint,move_to_device
+import json
+
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -98,10 +100,28 @@ def main(args):
     logger.info('reading data from file=%s', args.ctx_file)
 
     rows = []
+    idx=0
     with open(args.ctx_file) as tsvfile:
-        reader = csv.reader(tsvfile, delimiter='\t')
-        # file format: doc_id, doc_text, title
-        rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id'])
+        # reader = csv.reader(tsvfile, delimiter='\t')
+        # # file format: doc_id, doc_text, title
+        # rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id'])
+
+        for line in tsvfile:
+            if args.CSNET_ADV:
+                js=json.loads(line)
+                rows.extend([(js["idx"], js["function"] , None )])
+            elif args.dataset == "CONCODE":
+                js = json.loads(line)
+                rows.extend([(args.ctx_file + "_" + str(idx), js["code"], None)])
+            elif args.dataset=="KP20k":
+                js = json.loads(line)
+                text = js["title"] + ' </s> ' + js["abstract"]
+                rows.extend([(str(idx), line, None)])
+            else:
+                rows.extend([(args.ctx_file + "_" + str(idx), line, None)])
+            idx+=1
+
+
 
     shard_size = int(len(rows) / args.num_shards)
     start_idx = args.shard_id * shard_size
@@ -110,7 +130,8 @@ def main(args):
     logger.info('Producing encodings for passages range: %d to %d (out of total %d)', start_idx, end_idx, len(rows))
     rows = rows[start_idx:end_idx]
 
-    data = gen_ctx_vectors(rows, encoder, tensorizer, True)
+    # data = gen_ctx_vectors(rows, encoder, tensorizer, True)
+    data = gen_ctx_vectors(rows, encoder, tensorizer, False)
 
     file = args.out_file + '_' + str(args.shard_id) + '.pkl'
     pathlib.Path(os.path.dirname(file)).mkdir(parents=True, exist_ok=True)
@@ -131,9 +152,17 @@ if __name__ == '__main__':
     parser.add_argument('--ctx_file', type=str, default=None, help='Path to passages set .tsv file')
     parser.add_argument('--out_file', required=True, type=str, default=None,
                         help='output file path to write results to')
+
     parser.add_argument('--shard_id', type=int, default=0, help="Number(0-based) of data shard to process")
     parser.add_argument('--num_shards', type=int, default=1, help="Total amount of data shards")
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for the passage encoder forward pass")
+    parser.add_argument("--CSNET_ADV", action='store_true',
+                        help="Whether to parse CSNET_ADV.")
+    parser.add_argument("--concode_with_code", action='store_true',
+                        help="Whether to parse CSNET_ADV.")
+    parser.add_argument('--dataset', type=str, default=None,
+                        help=' to build correct dataset parser ')
+
     args = parser.parse_args()
 
     assert args.model_file, 'Please specify --model_file checkpoint to init model weights'

@@ -7,11 +7,9 @@ concode_with_code=False
 
 
 CHECKPOINT_DIR_PATH="/home/rizwan/DPR_models/biencoder_models_with_concode_tokens/"+lang
-if not concode_with_code: CHECKPOINT_DIR_PATH="/home/rizwan/DPR_models/biencoder_models_concode_with_code_tokens/"+lang
+if not concode_with_code: CHECKPOINT_DIR_PATH="/home/rizwan/DPR_models/biencoder_models_concode_without_code_tokens/"+lang
 
 pretrained_model="microsoft/codebert-base"
-pretrained_model="/home/rizwan/DPR_models/biencoder_models_concode_with_code_tokens/java/dpr_biencoder.4.1786"
-
 DEVICES=[0,2,3,4,5,6,7]
 CUDA_VISIBLE_DEVICES=','.join([str(i) for i in DEVICES])
 
