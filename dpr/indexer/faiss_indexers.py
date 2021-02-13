@@ -40,7 +40,10 @@ class DenseIndexer(object):
                 logger.info('data indexed %d, used_time: %f sec.',
                             len(self.index_id_to_db_id), time.time() - start_time)
                 buffer = []
-        self._index_batch(buffer)
+        try:
+            self._index_batch(buffer)
+        except:
+            pass
 
         indexed_cnt = len(self.index_id_to_db_id)
         logger.info('Total data indexed %d', indexed_cnt)
@@ -87,10 +90,17 @@ class DenseIndexer(object):
     def _update_id_mapping(self, db_ids: List):
         self.index_id_to_db_id.extend(db_ids)
 
+    def reset(self):
+        self.index.reset()
+
+    def add(self, c):
+        self.index.add(c)
+
+
 
 class DenseFlatIndexer(DenseIndexer):
 
-    def __init__(self, vector_sz: int, buffer_size: int = 50000):
+    def __init__(self, vector_sz: int, buffer_size: int = 50000, faiss_gpu = False):
         super(DenseFlatIndexer, self).__init__(buffer_size=buffer_size)
         self.index = faiss.IndexFlatIP(vector_sz)
 
