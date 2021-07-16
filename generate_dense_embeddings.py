@@ -11,6 +11,7 @@
 """
 import os
 import pathlib
+import gzip, pickle
 
 import argparse
 import csv
@@ -91,6 +92,12 @@ def main(args):
     model_to_load = get_model_obj(encoder)
     logger.info('Loading saved model state ...')
     logger.debug('saved model keys =%s', saved_state.model_dict.keys())
+    if  args.code_to_text:
+        logger.info('Code to Text')
+    else:
+        logger.debug('Text to Code')
+
+
 
     prefix_len = len('ctx_model.')
     ctx_state = {key[prefix_len:]: value for (key, value) in saved_state.model_dict.items() if
@@ -101,25 +108,73 @@ def main(args):
 
     rows = []
     idx=0
-    with open(args.ctx_file) as tsvfile:
-        # reader = csv.reader(tsvfile, delimiter='\t')
-        # # file format: doc_id, doc_text, title
-        # rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id'])
-
-        for line in tsvfile:
-            if args.CSNET_ADV:
-                js=json.loads(line)
-                rows.extend([(js["idx"], js["function"] , None )])
-            elif args.dataset == "CONCODE":
-                js = json.loads(line)
-                rows.extend([(args.ctx_file + "_" + str(idx), js["code"], None)])
-            elif args.dataset=="KP20k":
-                js = json.loads(line)
-                text = js["title"] + ' </s> ' + js["abstract"]
-                rows.extend([(str(idx), line, None)])
+    if args.ctx_file.endswith('gz'):
+        with gzip.open(args.ctx_file, 'r') as pf:
+            data = pf.readlines()
+            for idx, d in enumerate(data):
+                line_a = json.loads(str(d, encoding='utf-8'))
+                doc_token = ' '.join(line_a['docstring_tokens'])
+                code_token = ' '.join(line_a['code_tokens'])
+                rows.extend([(args.ctx_file + "_" + str(idx), code_token, None)])
+    elif args.ctx_file.endswith('pkl'):
+        definitions = pickle.load(open(args.ctx_file, 'rb'))
+        for idx, d in enumerate(definitions):
+            if not args.code_to_text:
+                rows.extend([(args.ctx_file + "_" + str(idx), ' '.join(d["function_tokens"]), None)])
             else:
+                rows.extend([(args.ctx_file + "_" + str(idx), ' '.join(d["docstring_tokens"]), None)])
+    elif args.ctx_file.endswith('deduplicated.summaries.txt'):
+        with open(args.ctx_file) as f:
+            for idx, line in enumerate(f):
                 rows.extend([(args.ctx_file + "_" + str(idx), line, None)])
-            idx+=1
+    else:
+        with open(args.ctx_file) as tsvfile:
+            # reader = csv.reader(tsvfile, delimiter='\t')
+            # # file format: doc_id, doc_text, title
+            # rows.extend([(row[0], row[1], row[2]) for row in reader if row[0] != 'id'])
+
+            prompt_counts=0
+            for line in tsvfile:
+                if args.CSNET_ADV:
+                    prompt_counts+=1
+                    js=json.loads(line)
+                    rows.extend([(js["idx"], ' '.join(js["function_tokens"]) , None )])
+                    if prompt_counts<5:
+                        print('encoding function tokens: ', ' '.join(js["function_tokens"]))
+                elif args.dataset == 'conala':
+                    js=json.loads(line)
+                    rows.extend([(js["id"], ' '.join(js["snippet"]), None)])
+                elif args.WEBQUERY:
+                    prompt_counts+=1
+                    js=json.loads(line)
+                    raw_code = js["code"]
+                    rows.extend([(js["idx"], ' '.join(js["function_tokens"]) , None )])
+                    if prompt_counts<5:
+                        print('encoding function tokens: ', ' '.join(js["code"]))
+                elif args.dataset == "csnet_candidates":
+                    prompt_counts += 1
+                    js = json.loads(line)
+                    raw_code = js["code"]
+                    rows.extend([(js["url"], ' '.join(js["code_tokens"]), None)])
+                    if prompt_counts < 5:
+                        print('encoding function tokens: ', ' '.join(js["code_tokens"]))
+                elif args.dataset == "CONCODE":
+                    js = json.loads(line)
+                    rows.extend([(args.ctx_file + "_" + str(idx), js["code"], None)])
+                elif args.dataset=="KP20k":
+                    js = json.loads(line)
+                    text = js["title"] + ' </s> ' + js["abstract"]
+                    rows.extend([(str(idx), line, None)])
+                elif args.ctx_file.endswith("txt"):
+                    line = line.strip().split('<CODESPLIT>')
+                    target_str = 4
+                    code = line[target_str]
+                    rows.extend([(args.ctx_file + "_" + str(idx), code, None)])
+                    if idx<5:
+                        logger.info("Encoding Code: %s", code)
+                else:
+                    rows.extend([(args.ctx_file + "_" + str(idx), line, None)])
+                idx+=1
 
 
 
@@ -158,7 +213,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for the passage encoder forward pass")
     parser.add_argument("--CSNET_ADV", action='store_true',
                         help="Whether to parse CSNET_ADV.")
+    parser.add_argument("--WEBQUERY", action='store_true',
+                        help="Whether to parse CSNET_ADV.")
     parser.add_argument("--concode_with_code", action='store_true',
+                        help="Whether to parse CSNET_ADV.")
+    parser.add_argument("--code_to_text", action='store_true',
                         help="Whether to parse CSNET_ADV.")
     parser.add_argument('--dataset', type=str, default=None,
                         help=' to build correct dataset parser ')

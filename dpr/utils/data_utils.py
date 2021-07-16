@@ -33,7 +33,9 @@ def read_serialized_data_from_files(paths: List[str]) -> List:
     return results
 
 
-def read_data_from_json_files(paths: List[str], upsample_rates: List = None, TopCodeR=True, text_to_code=True, concode_with_code=False, dataset = "CONCODE") -> List:
+def read_data_from_json_files(paths: List[str], upsample_rates: List = None, TopCodeR=True, text_to_code=True, concode_with_code=True, dataset = "CONCODE", valid=False) -> List:
+    logger.info("Text to Code:  ", str(text_to_code))
+
     results = []
     if upsample_rates is None:
         upsample_rates = [1] * len(paths)
@@ -50,7 +52,32 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
                 results.extend(data)
                 logger.info('Aggregated data size: {}'.format(len(results)))
         else:
-            if dataset == 'CONCODE':
+            if dataset == 'conala':
+                logger.info("Parsing CoNaLa dataset")
+                p = (15000+2379)//10
+                if path.endswith("json"):
+                    with open(path) as reader:
+                        data = json.load(reader)
+                        if valid:
+                            data=data[-p:]
+                        else:
+                            data = data[:-p]
+
+                        for d in data:
+                            try:
+                                results.append({"question": d["rewritten_intent"], "hard_negative_ctxs": [], "negative_ctxs": [],
+                                  "positive_ctxs": [{"text":d["snippet"], "title":None}], "label": "1"} )
+                            except:
+                                results.append({"question": d["intent"], "hard_negative_ctxs": [],
+                                                "negative_ctxs": [],
+                                                "positive_ctxs": [{"text": d["snippet"], "title": None}],
+                                                "label": "1"})
+
+
+                # import ipdb
+                # ipdb.set_trace()
+
+            elif dataset == 'CONCODE':
                 logger.info("Parsing CONCODE dataset")
                 source_str = "nl"
                 target_str = "code"
@@ -74,7 +101,7 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
                             logger.info("Source/q: %s", q)
                             logger.info("Traget/context: %s", ctx["text"])
                             logger.info("----------------------")
-            if dataset == "KP20k":
+            elif dataset == "KP20k":
                 logger.info("Parsing KP20k dataset")
                 with open(path) as reader:
                     for row in reader:
@@ -91,7 +118,27 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
                             logger.info("Traget/context: %s", ctx["text"])
                             logger.info("----------------------")
 
+
+            elif dataset == "ICLR" and not text_to_code:
+                logger.info("Parsing ICLR dataset")
+                with open(path) as reader:
+                    for row in reader:
+                        line = json.loads(row)
+                        q = line["function"]
+                        text = line["summary"]
+                        ctx = {"text": text, "title": None, "answers": [ text ]}
+                        object = {"question": q, "hard_negative_ctxs": [], "negative_ctxs": [],
+                                  "positive_ctxs": [ctx], "label": "1"}
+                        results.append(object)
+                        if len(results) < 5:
+                            logger.info("----------------------")
+                            logger.info("Source/q: %s", q)
+                            logger.info("Traget/context: %s", ctx["text"])
+                            logger.info("----------------------")
+
             elif path.endswith("txt"):
+                if text_to_code: logger.info("Text-to-Code")
+                else: logger.info("Code-to-Text")
                 with open(path, "r", encoding='utf-8') as f:
                     logger.info('Reading file %s' % path)
                     for line in f.readlines():
@@ -121,34 +168,36 @@ def read_data_from_json_files(paths: List[str], upsample_rates: List = None, Top
 
             elif path.endswith("jsonl"):
                 with open(path, "r", encoding='utf-8') as f:
-                    logger.info('Reading file %s' % path)
+                    logger.info('Reading csnet file %s' % path)
                     for line in f.readlines():
                         line = json.loads(line)
                         label = str("1")
-                        source_str="docstring"
-                        target_str="function"
-                        if not text_to_code:
-                            source_str = "function"
-                            target_str = "docstring"
+                        source_str="docstring_tokens"
+                        target_str="function_tokens"
+                        target="function"
 
+                        if not text_to_code:
+                            source_str = "function_tokens"
+                            target_str = "docstring_tokens"
 
                         try:
-                            ctx = {"text":line[target_str], "title":None, "answers":[line[target_str]]}
-                            if label=="0": object = {"question": line[source_str], "hard_negative_ctxs": [ctx], "negative_ctxs":[], "positive_ctxs":[], "label": label}
-                            else: object = {"question": line[source_str], "positive_ctxs":[ctx], "hard_negative_ctxs": [], "negative_ctxs":[], "label": label}
+                            ctx = {"text":' '.join(line[target_str]), "title":None, "answers":[' '.join(line[target_str])]}
+                            if label=="0": object = {"question": ' '.join(line[source_str]), "hard_negative_ctxs": [ctx], "negative_ctxs":[], "positive_ctxs":[], "label": label}
+                            else: object = {"question": ' '.join(line[source_str]), "positive_ctxs":[ctx], "hard_negative_ctxs": [], "negative_ctxs":[], "label": label}
                             results.append(object)
                         except:
                             if "function" in source_str:
-                                source_str="code"
+                                source_str="code_tokens"
                             else:
-                                target_str = "code"
+                                target_str = "code_tokens"
+                                target = 'code'
                             try:
-                                ctx = {"text": line[target_str], "title": None, "answers": [line[target_str]]}
+                                ctx = {"text": ' '.join(line[target_str]), "title": None, "answers": [' '.join(line[target_str])]}
                                 if label == "0":
-                                    object = {"question": line[source_str], "hard_negative_ctxs": [ctx],
+                                    object = {"question": ' '.join(line[source_str]), "hard_negative_ctxs": [ctx],
                                               "negative_ctxs": [], "positive_ctxs": [], "label": label}
                                 else:
-                                    object = {"question": line[source_str], "positive_ctxs": [ctx],
+                                    object = {"question": ' '.join(line[source_str]), "positive_ctxs": [ctx],
                                               "hard_negative_ctxs": [], "negative_ctxs": [], "label": label}
                                 results.append(object)
                             except:

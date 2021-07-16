@@ -3,9 +3,9 @@ import os
 # lang = ["go",  "java",  "javascript",  "php",  "python",  "ruby"]
 
 lang='python'
-lang='java'
+# lang='java'
 
-CHECKPOINT="/home/rizwan/DPR_models/biencoder_models_codexglue_text_code/python/dpr_biencoder.3.3935"
+CHECKPOINT="/home/rizwan/DPR_models/biencoder_models_codexglue_text_code/python/dpr_biencoder.8.10493"
 
 pretrained_model="microsoft/codebert-base"
 
@@ -24,7 +24,7 @@ OUTPUT_ENCODED_FILES = "/home/rizwan/DPR_models/github_encoddings/python/adv_enc
 qa_file = "/home/rizwan/CodeXGLUE/Text-Code/NL-code-search-Adv/dataset/test.jsonl"
 print(qa_file)
 
-DEVICES = [0]
+DEVICES = [2]
 CUDA_VISIBLE_DEVICES = ','.join([str(i) for i in DEVICES])
 
 top_k =  19210

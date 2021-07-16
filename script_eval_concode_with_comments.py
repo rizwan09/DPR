@@ -39,7 +39,7 @@ top_k =  100
 
 command = 'CUDA_VISIBLE_DEVICES=' + CUDA_VISIBLE_DEVICES + \
           ' python ' + \
-          ' dense_retriever.py  --model_file '+ CHECKPOINT + \
+          ' dense_retriever_with_comments.py  --model_file '+ CHECKPOINT + \
           '  --ctx_file  '+ str(ctx_file) + \
           '  --qa_file '+ qa_file + \
           '  --encoded_ctx_file ' + str(OUTPUT_ENCODED_FILES) + \

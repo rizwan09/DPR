@@ -1,13 +1,14 @@
 import os
 
-lang='java'
-CHECKPOINT="/home/rizwan/DPR_models/biencoder_models_with_concode_tokens/KP20k/dpr_biencoder.9.15932"
-pretrained_model="bert-base-uncased"
+lang='python'
+CHECKPOINT="/home/rizwan/DPR_models/biencoder_models_conala//dpr_biencoder.29.977"
+pretrained_model="/home/rizwan/graphcodebert-base/"
 
-FILE = "/home/wasiahmad/workspace/projects/NeuralKpGen/data/scikp/kp20k_separated/KP20k.test.jsonl"
-OUTPUT_ENCODED_FILE = "/local/rizwan/DPR_models/github_encoddings_KP20k/KP20k.test.jsonl"
+FILE = "/home/rizwan/DPR_models/conala-corpus/conala-mined.jsonl"
+# FILE = "/home/rizwan/DPR_models/external-knowledge-codegen/apidocs/processed/distsmpl/snippet_15k/unique_snippets.txt"
+OUTPUT_ENCODED_FILE = "/local/rizwan/DPR_models/github_encoddings_conala-mined.jsonl"
 
-DEVICES = [0,1,2,3]
+DEVICES = [1,3]
 CUDA_VISIBLE_DEVICES = ','.join([str(i) for i in DEVICES])
 
 command = "CUDA_VISIBLE_DEVICES=" + CUDA_VISIBLE_DEVICES + \
@@ -18,7 +19,7 @@ command = "CUDA_VISIBLE_DEVICES=" + CUDA_VISIBLE_DEVICES + \
           ' --pretrained_model_cfg   ' + pretrained_model + \
           ' --batch_size 128 --ctx_file  ' + FILE + \
           ' --shard_id 0 ' \
-          ' --dataset KP20k ' \
+          ' --dataset conala ' \
           ' --num_shards 1 ' \
           ' --out_file ' + OUTPUT_ENCODED_FILE
 

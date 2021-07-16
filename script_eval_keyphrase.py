@@ -8,7 +8,8 @@ pretrained_model="bert-base-uncased"
 
 top_k=20000
 qa_file_suffix = "test"
-FILE = "/home/wasiahmad/workspace/projects/NeuralKpGen/data/scikp/kp20k_separated/KP20k.test.jsonl"
+CTX_FILE = "/home/wasiahmad/workspace/projects/NeuralKpGen/data/scikp/kp20k_separated/KP20k.test.jsonl"
+FILE = "/home/wasiahmad/workspace/projects/NeuralKpGen/retrieval/results/KP20k.test.bart.jsonl"
 OUTPUT_ENCODED_FILE = "/local/rizwan/DPR_models/github_encoddings_KP20k/KP20k.test.jsonl_0.pkl"
 
 DEVICES = [5]
@@ -17,7 +18,7 @@ CUDA_VISIBLE_DEVICES = ','.join([str(i) for i in DEVICES])
 command = 'CUDA_VISIBLE_DEVICES=' + CUDA_VISIBLE_DEVICES + \
           ' python ' + \
           ' dense_retriever.py  --model_file '+ CHECKPOINT + \
-          '  --ctx_file  '+ FILE + \
+          '  --ctx_file  '+ CTX_FILE + \
           '  --qa_file '+ FILE + \
           '  --encoded_ctx_file ' + OUTPUT_ENCODED_FILE + \
           '  --out_file  '+ OUTPUT_DIR+str(qa_file_suffix)+"_"+str(top_k)+".json" \

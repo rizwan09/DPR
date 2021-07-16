@@ -270,11 +270,18 @@ def load_passages(ctx_files: str, CSNET_ADV=False, dataset = None) -> Dict[objec
         elif ctx_file.endswith(".pkl"):
             definitions = pickle.load(open(args.ctx_file, 'rb'))
             for idx, d in enumerate(definitions):
-                docs[args.ctx_file + "_" + str(idx)] = (' '.join(d["function_tokens"]), None)
+                # docs[args.ctx_file + "_" + str(idx)] = (' '.join(d["function_tokens"]), None)
+                docs[args.ctx_file + "_" + str(idx)] = (' '.join(d["function_tokens"])+ ' _NL_ ' +d['docstring_summary'], None)
 
         elif args.ctx_file.endswith('deduplicated.summaries.txt'):
+            if 'java' in args.qa_file:
+                lang = 'java'
+            elif 'python' in args.qa_file:
+                lang = 'python'
+            codes = json.load(open(lang + '_summary_codes.json'))
             with open(args.ctx_file) as f:
                 for idx, line in enumerate(f):
+                    if line in codes: line += '_NL_'+codes[line]
                     docs[args.ctx_file + "_" + str(idx)] = (line, None)
 
         elif ctx_file.endswith(".gz"):
